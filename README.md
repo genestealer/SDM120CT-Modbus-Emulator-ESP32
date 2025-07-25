@@ -1,2 +1,2 @@
 # SDM120CT_Modbus_Emulator
-SDM120CT Emulator
+Eastron SDM120CT ESP32 modbus Emulator
