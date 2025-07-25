@@ -9,9 +9,15 @@
 #include <time.h>
 
 // ========================= Debug Config =========================
+// Enable or disable debug logs if not defined in Private.h
+#ifndef DEBUG_HEX_FRAMES
 #define DEBUG_HEX_FRAMES false  // Set true to enable Modbus HEX frame logs
-#define DEBUG_WIFI true
+#endif
+
+// Enable or disable Wi-Fi debug logs if not defined in Private.h
+#ifndef DEBUG_WIFI
 #define DEBUG_MQTT true
+#endif
 
 // ========================= RS-485 Config =========================
 #define RS485_TX 17
@@ -19,6 +25,7 @@
 #define RS485_RTS 4 // DE/RE control
 
 // ========================= Wi-Fi & MQTT Config =========================
+// Secrets pulled from Private.h file
 const char* ssid = secret_wifi_ssid;
 const char* password = secret_wifi_password;
 const char* mqtt_server = secret_mqtt_server;
@@ -27,7 +34,7 @@ const char* mqtt_password = secret_mqtt_password;
 const int mqtt_port = 1883;
 
 
-// Define the Wi-Fi PHY mode if missing from the private.h file
+// Define the Wi-Fi PHY mode if not defined in Private.h
 #ifndef ENABLE_WIFI_PHY_MODE_11G
 #define ENABLE_WIFI_PHY_MODE_11G 0  // Set to 1 to enable 11G PHY mode
 #endif
@@ -45,7 +52,10 @@ const char* device_manufacturer = "Genestealer";
 const char* device_id = "sdm120ct_emulator";
 
 // ========================= Modbus Config =========================
+// If not defined in Private.h, use this default ID
+#ifndef DEFAULT_METER_ID
 #define DEFAULT_METER_ID 1
+#endif
 
 // ========================= Modbus Server =========================
 ModbusServerRTU MBserver(2000, RS485_RTS); // 2000ms timeout
