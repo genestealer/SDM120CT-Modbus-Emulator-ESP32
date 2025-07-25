@@ -3,18 +3,21 @@
 
 using namespace Modbus;
 
-// RS-485 pin config
+// ========================= Debug Config =========================
+#define DEBUG_HEX_FRAMES false  // Set to true to enable response hex dump
+
+// ========================= RS-485 Config =========================
 #define RS485_TX 17
 #define RS485_RX 16
 #define RS485_RTS 4 // DE/RE control
 
-// Meter ID
+// ========================= Meter Config =========================
 #define DEFAULT_METER_ID 1
 
-// Modbus RTU server
+// ========================= Modbus Server =========================
 ModbusServerRTU MBserver(2000, RS485_RTS); // 2000ms timeout
 
-// --- SDM120CT Values ---
+// ========================= SDM120 Data =========================
 float voltage = 240.0;        // V
 float current = 1.25;         // A
 float activePower = 300.0;    // W
@@ -30,32 +33,35 @@ float exportReactiveEnergy = 0.0; // kVArh
 float totalActiveEnergy = 15.0;   // kWh
 float totalReactiveEnergy = 2.0;  // kVArh
 
-// Configurable holding registers (setup)
+// ========================= Configurable Registers =========================
 uint16_t meterID = DEFAULT_METER_ID; // Default ID
 uint16_t baudSetting = 2;            // 2 = 9600 baud
-uint16_t paritySetting = 0;          // 0 = None, 1 = Even, 2 = Odd
+uint16_t paritySetting = 0;          // 0=None, 1=Even, 2=Odd
 
 // Setup mode flag
-bool setupMode = true; // Later controlled by MQTT
+bool setupMode = true; // Later controlled by MQTT or serial
 
-// Utility: Convert float to two Modbus registers (word-swapped)
+// ========================= Utilities =========================
+// Convert float to two Modbus registers (word-swapped)
 void floatToRegisters(float value, uint16_t *regHi, uint16_t *regLo) {
   uint16_t regs[2];
   memcpy(regs, &value, sizeof(float));
-  *regHi = regs[1]; // SDM120 word order: high word first
+  *regHi = regs[1];
   *regLo = regs[0];
 }
 
 // Debug: Print response frame
 void printHexFrame(ModbusMessage &msg) {
+#if DEBUG_HEX_FRAMES
   Serial.print("[RESP HEX] ");
   for (size_t i = 0; i < msg.size(); i++) {
     Serial.printf("%02X ", msg[i]);
   }
   Serial.println();
+#endif
 }
 
-// ----------------- Handlers -----------------
+// ========================= Handlers =========================
 
 // Handle Read Input Registers (FC=04)
 ModbusMessage handleRead(ModbusMessage request) {
@@ -93,14 +99,9 @@ ModbusMessage handleRead(ModbusMessage request) {
     response.add(lo);
   }
 
-  // Debug
-  // printHexFrame(response);
-
-  // Add Modbus RTU timing gap before sending
- // Add turnaround delay before responding
-  delay(50);  // 30 ms for inverter stability
-
-  return response; // The library sends it
+  delay(50);  // Modbus RTU turnaround delay
+  printHexFrame(response);
+  return response;
 }
 
 // Handle Read Holding Registers (FC=03)
@@ -122,6 +123,7 @@ ModbusMessage handleReadHolding(ModbusMessage request) {
     response.add(value);
   }
 
+  printHexFrame(response);
   return response;
 }
 
@@ -130,20 +132,17 @@ ModbusMessage handleWriteHolding(ModbusMessage request) {
   uint16_t startAddr, words;
   request.get(2, startAddr);
   request.get(4, words);
-  uint8_t byteCount;
-  request.get(6, byteCount);
 
   Serial.printf("[REQ HOLD WRITE] Addr=%u Words=%u\n", startAddr, words);
 
   if (!setupMode) {
     Serial.println("[WARN] Write ignored - setup mode disabled.");
-    // Respond with exception if setup mode is off
     ModbusMessage exception;
     exception.setError(request.getServerID(), request.getFunctionCode(), ILLEGAL_FUNCTION);
     return exception;
   }
 
-  size_t index = 7; // First data byte
+  size_t index = 7; // Data starts here
   for (uint16_t i = 0; i < words; i++) {
     uint16_t value;
     request.get(index, value);
@@ -166,16 +165,16 @@ ModbusMessage handleWriteHolding(ModbusMessage request) {
   response.add(startAddr);
   response.add(words);
 
+  printHexFrame(response);
   return response;
 }
 
-// ----------------- Setup & Loop -----------------
-
+// ========================= Setup =========================
 void setup() {
   Serial.begin(115200);
-  Serial.println("Starting SDM120CT Emulator with Setup Mode...");
+  Serial.println("Starting SDM120CT Emulator (Single Meter)...");
 
-  // Register Modbus workers
+  // Register Modbus handlers
   MBserver.registerWorker(meterID, READ_INPUT_REGISTER, &handleRead);
   MBserver.registerWorker(meterID, READ_HOLD_REGISTER, &handleReadHolding);
   MBserver.registerWorker(meterID, WRITE_MULT_REGISTERS, &handleWriteHolding);
@@ -186,6 +185,7 @@ void setup() {
   Serial.println("Modbus RTU server ready. Waiting for inverter...");
 }
 
+// ========================= Loop =========================
 void loop() {
   static uint32_t lastUpdate = 0;
   if (millis() - lastUpdate > 3000) {
