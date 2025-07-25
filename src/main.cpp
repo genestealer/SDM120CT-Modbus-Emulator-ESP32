@@ -333,6 +333,30 @@ String jsonDiscoveryRestartButton = R"rawliteral(
 }
 )rawliteral";
 
+// Discovery for Inverter Connection Status
+String jsonDiscoveryInverterConnected = R"rawliteral(
+{
+  "name": "Inverter Connnected",
+  "uniq_id": "sdm120ct_inverter_connected",
+  "obj_id": "sdm120ct_inverter_connected",
+  "device_class": "connectivity",
+  "qos": 0,
+  "avty_t": "homeassistant/sensor/sdm120ct/status",
+  "stat_t": "homeassistant/binary_sensor/sdm120ct/inverter_connected",
+  "pl_on": "ON",
+  "pl_off": "OFF",
+  "stat_on": "ON",
+  "stat_off": "OFF",
+  "ent_cat": "diagnostic",
+  "dev": {
+    "ids": ["sdm120ct_emulator"],
+    "name": "SDM120CT Modbus Emulator",
+    "mdl": "ESP32 SDM120CT Modbus Emulator",
+    "mf": "Genestealer"
+  }
+}
+)rawliteral";
+
 // ========================= MQTT Functions =========================
 // Function: publishWifiDetails
 // Description: Publishes Wi-Fi diagnostics (IP, RSSI, signal strength, etc.) to MQTT.
@@ -374,9 +398,29 @@ void publishWifiDetails() {
   if (DEBUG_MQTT) Serial.println("[MQTT] Wi-Fi details published");
 }
 
-// Remove publishing of emulated meter data
-void publishMeterData() {
-  Serial.println("[INFO] Publishing of emulated meter data has been disabled.");
+
+// binary sensor for inverter connection status
+bool inverterConnected = false;
+unsigned long lastPollTime = 0;
+
+void publishInverterConnectionStatus(bool forcePublish = false) {
+  static bool lastPublishedState = false;
+
+  if (forcePublish || inverterConnected != lastPublishedState) {
+    Serial.println("[MQTT] Publishing inverter connection status");
+    String status = inverterConnected ? "ON" : "OFF";
+    mqtt.publish("homeassistant/binary_sensor/sdm120ct/inverter_connected", status, true);
+    lastPublishedState = inverterConnected;
+  }
+}
+
+// Update connection status in Modbus handlers
+void updateInverterConnectionStatus(bool forcePublish = false) {
+  // Check if the inverter is connected based on the last poll time
+  inverterConnected = (millis() - lastPollTime) <= 60000; // 1 minute timeout
+
+  // Publish the connection status only if it has changed or if forced
+  publishInverterConnectionStatus(forcePublish);
 }
 
 // ========================= MQTT Callback =========================
@@ -407,6 +451,15 @@ void onConnectionEstablished() {
     else if (error == OTA_END_ERROR) Serial.println("End Failed");
   });
   ArduinoOTA.begin();
+
+  // Configure NTP
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+  Serial.println("[INFO] NTP server configured.");
+  delay(5000); // Give it a moment for the time to sync the print out the time
+  time_t tnow = time(nullptr);
+  struct tm *ptm = gmtime(&tnow);
+  Serial.printf("Current date (UTC) : %04d/%02d/%02d %02d:%02d/%02d - %s\n", ptm->tm_year + 1900, ptm->tm_mon + 1, ptm->tm_mday, ptm->tm_hour, ptm->tm_min, ptm->tm_sec, String(tnow, DEC).c_str());
+  
 
   // Subscribe for meter values (JSON)
   mqtt.subscribe(mqtt_topic_subscribe, [](const String &payload) {
@@ -477,7 +530,13 @@ void onConnectionEstablished() {
   mqtt.publish("homeassistant/button/sdm120ct_restart/config", jsonDiscoveryRestartButton, true);
   delay(100);
 
+  // Publish Inverter Connection Status Auto-Discovery
+  mqtt.publish("homeassistant/binary_sensor/sdm120ct_inverter_connected/config", jsonDiscoveryInverterConnected, true);
+  delay(100);
+
   if (DEBUG_MQTT) Serial.println("[MQTT] Auto-Discovery configurations sent");
+
+
 
   // Publish initial states
   publishWifiDetails();
@@ -486,21 +545,15 @@ void onConnectionEstablished() {
   mqtt.publish("homeassistant/meter/setupmode/state", setupMode ? "ON" : "OFF", true);
 
 
-  // Configure NTP
-  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
-  Serial.println("[INFO] NTP server configured.");
-  delay(5000); // Give it a moment for the time to sync the print out the time
-  time_t tnow = time(nullptr);
-  struct tm *ptm = gmtime(&tnow);
-  Serial.printf("Current date (UTC) : %04d/%02d/%02d %02d:%02d/%02d - %s\n", ptm->tm_year + 1900, ptm->tm_mon + 1, ptm->tm_mday, ptm->tm_hour, ptm->tm_min, ptm->tm_sec, String(tnow, DEC).c_str());
-  
-
   if (DEBUG_MQTT) Serial.println("[MQTT] Setup complete - Ready to go!");
 }
 
 // ========================= Modbus Handlers =========================
 // Handle Read Input Registers (FC=04)
 ModbusMessage handleRead(ModbusMessage request) {
+  lastPollTime = millis();
+  updateInverterConnectionStatus();
+
   uint16_t startAddr, words;
   request.get(2, startAddr);
   request.get(4, words);
@@ -538,6 +591,9 @@ ModbusMessage handleRead(ModbusMessage request) {
 
 // Handle Read Holding Registers (FC=03)
 ModbusMessage handleReadHolding(ModbusMessage request) {
+  lastPollTime = millis();
+  updateInverterConnectionStatus();
+
   uint16_t startAddr, words;
   request.get(2, startAddr);
   request.get(4, words);
@@ -560,6 +616,9 @@ ModbusMessage handleReadHolding(ModbusMessage request) {
 
 // Handle Write Holding Registers (FC=16)
 ModbusMessage handleWriteHolding(ModbusMessage request) {
+  lastPollTime = millis();
+  updateInverterConnectionStatus();
+
   uint16_t startAddr, words;
   request.get(2, startAddr);
   request.get(4, words);
@@ -636,12 +695,13 @@ void loop() {
   mqtt.loop(); // EspMQTTClient handles Wi-Fi & MQTT internally
   ArduinoOTA.handle(); // Handle OTA updates
   
-  // Periodic telemetry updates every 30 seconds
+  // Periodic telemetry updates every 60 seconds
   static unsigned long lastTelemetryUpdate = 0;
-  if (millis() - lastTelemetryUpdate > 30000) {
+  if (millis() - lastTelemetryUpdate > 60000) {
     lastTelemetryUpdate = millis();
     if (mqtt.isConnected()) {
       publishWifiDetails();
+      updateInverterConnectionStatus(true);
     }
   }
 }
