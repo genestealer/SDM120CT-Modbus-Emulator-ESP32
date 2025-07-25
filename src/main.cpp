@@ -8,12 +8,13 @@ using namespace Modbus;
 #define RS485_RX 16
 #define RS485_RTS 4 // DE/RE control
 
-#define METER_ID  1  // Modbus Slave ID (1-247)
+// Meter ID
+#define DEFAULT_METER_ID 1
 
 // Modbus RTU server
-ModbusServerRTU MBserver(2000, RS485_RTS); // timeout = 2000ms
+ModbusServerRTU MBserver(2000, RS485_RTS); // 2000ms timeout
 
-// --- SDM120CT Values for testing ---
+// --- SDM120CT Values ---
 float voltage = 240.0;        // V
 float current = 1.25;         // A
 float activePower = 300.0;    // W
@@ -29,6 +30,14 @@ float exportReactiveEnergy = 0.0; // kVArh
 float totalActiveEnergy = 15.0;   // kWh
 float totalReactiveEnergy = 2.0;  // kVArh
 
+// Configurable holding registers (setup)
+uint16_t meterID = DEFAULT_METER_ID; // Default ID
+uint16_t baudSetting = 2;            // 2 = 9600 baud
+uint16_t paritySetting = 0;          // 0 = None, 1 = Even, 2 = Odd
+
+// Setup mode flag
+bool setupMode = true; // Later controlled by MQTT
+
 // Utility: Convert float to two Modbus registers (word-swapped)
 void floatToRegisters(float value, uint16_t *regHi, uint16_t *regLo) {
   uint16_t regs[2];
@@ -37,6 +46,7 @@ void floatToRegisters(float value, uint16_t *regHi, uint16_t *regLo) {
   *regLo = regs[0];
 }
 
+// Debug: Print response frame
 void printHexFrame(ModbusMessage &msg) {
   Serial.print("[RESP HEX] ");
   for (size_t i = 0; i < msg.size(); i++) {
@@ -45,6 +55,7 @@ void printHexFrame(ModbusMessage &msg) {
   Serial.println();
 }
 
+// ----------------- Handlers -----------------
 
 // Handle Read Input Registers (FC=04)
 ModbusMessage handleRead(ModbusMessage request) {
@@ -52,12 +63,11 @@ ModbusMessage handleRead(ModbusMessage request) {
   request.get(2, startAddr);
   request.get(4, words);
 
-  Serial.printf("[REQ] FC=%02X Addr=%u Words=%u\n", request.getFunctionCode(), startAddr, words);
+  Serial.printf("[REQ INPUT READ] Addr=%u Words=%u\n", startAddr, words);
 
   ModbusMessage response;
   response.add(request.getServerID(), request.getFunctionCode(), (uint8_t)(words * 2));
 
-  // Prepare 72 registers (144 bytes)
   for (uint16_t i = 0; i < words; i += 2) {
     uint16_t regAddr = startAddr + i;
     uint16_t hi = 0, lo = 0;
@@ -88,16 +98,87 @@ ModbusMessage handleRead(ModbusMessage request) {
 
   // Add Modbus RTU timing gap before sending
  // Add turnaround delay before responding
-  delay(20);  // 20 ms for inverter stability
+  delay(50);  // 30 ms for inverter stability
 
   return response; // The library sends it
 }
 
+// Handle Read Holding Registers (FC=03)
+ModbusMessage handleReadHolding(ModbusMessage request) {
+  uint16_t startAddr, words;
+  request.get(2, startAddr);
+  request.get(4, words);
+
+  Serial.printf("[REQ HOLD READ] Addr=%u Words=%u\n", startAddr, words);
+
+  ModbusMessage response;
+  response.add(request.getServerID(), request.getFunctionCode(), (uint8_t)(words * 2));
+
+  for (uint16_t i = 0; i < words; i++) {
+    uint16_t value = 0;
+    if (startAddr + i == 0x0014) value = meterID;
+    else if (startAddr + i == 0x001C) value = baudSetting;
+    else if (startAddr + i == 0x0012) value = paritySetting;
+    response.add(value);
+  }
+
+  return response;
+}
+
+// Handle Write Holding Registers (FC=16)
+ModbusMessage handleWriteHolding(ModbusMessage request) {
+  uint16_t startAddr, words;
+  request.get(2, startAddr);
+  request.get(4, words);
+  uint8_t byteCount;
+  request.get(6, byteCount);
+
+  Serial.printf("[REQ HOLD WRITE] Addr=%u Words=%u\n", startAddr, words);
+
+  if (!setupMode) {
+    Serial.println("[WARN] Write ignored - setup mode disabled.");
+    // Respond with exception if setup mode is off
+    ModbusMessage exception;
+    exception.setError(request.getServerID(), request.getFunctionCode(), ILLEGAL_FUNCTION);
+    return exception;
+  }
+
+  size_t index = 7; // First data byte
+  for (uint16_t i = 0; i < words; i++) {
+    uint16_t value;
+    request.get(index, value);
+    index += 2;
+
+    if (startAddr + i == 0x0014) {
+      meterID = value;
+      Serial.printf("Meter ID updated: %u\n", meterID);
+    } else if (startAddr + i == 0x001C) {
+      baudSetting = value;
+      Serial.printf("Baud setting updated: %u\n", baudSetting);
+    } else if (startAddr + i == 0x0012) {
+      paritySetting = value;
+      Serial.printf("Parity setting updated: %u\n", paritySetting);
+    }
+  }
+
+  ModbusMessage response;
+  response.add(request.getServerID(), request.getFunctionCode());
+  response.add(startAddr);
+  response.add(words);
+
+  return response;
+}
+
+// ----------------- Setup & Loop -----------------
+
 void setup() {
   Serial.begin(115200);
-  Serial.println("Starting SDM120CT Full Emulator (72 registers)");
+  Serial.println("Starting SDM120CT Emulator with Setup Mode...");
 
-  MBserver.registerWorker(METER_ID, READ_INPUT_REGISTER, &handleRead);
+  // Register Modbus workers
+  MBserver.registerWorker(meterID, READ_INPUT_REGISTER, &handleRead);
+  MBserver.registerWorker(meterID, READ_HOLD_REGISTER, &handleReadHolding);
+  MBserver.registerWorker(meterID, WRITE_MULT_REGISTERS, &handleWriteHolding);
 
   Serial2.begin(9600, SERIAL_8N1, RS485_RX, RS485_TX);
   MBserver.begin(Serial2);
