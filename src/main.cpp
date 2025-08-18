@@ -1,3 +1,28 @@
+/*
+ * SDM120CT Modbus Emulator
+ * 
+ * Description:
+ * This program emulates the SDM120CT Modbus meter and integrates with Home Assistant via MQTT.
+ * It supports telemetry publishing, setup mode toggle, restart functionality, and inverter connection status.
+ * 
+ * Example JSON to send meter data to mqtt_topic_subscribe
+ * {
+ *   "voltage": 230.0,
+ *   "current": 1.5,
+ *   "activePower": 345.0,
+ *   "apparentPower": 360.0,
+ *   "reactivePower": 25.0,
+ *   "powerFactor": 0.96,
+ *   "frequency": 50.0,
+ *   "importEnergy": 20.0,
+ *   "exportEnergy": 0.0
+ * }
+ * 
+ * Note:
+ * For Meter 1, the inverter expects to see a negative value when the house is drawing power from the grid
+ * and a positive value only if the house is exporting energy.
+ */
+
 #include <Arduino.h>
 #include <WiFi.h>
 #include <EspMQTTClient.h>
@@ -472,15 +497,16 @@ void onConnectionEstablished() {
       return;
     }
 
-    if (doc.containsKey("voltage")) voltage = doc["voltage"];
-    if (doc.containsKey("current")) current = doc["current"];
-    if (doc.containsKey("activePower")) activePower = doc["activePower"];
-    if (doc.containsKey("apparentPower")) apparentPower = doc["apparentPower"];
-    if (doc.containsKey("reactivePower")) reactivePower = doc["reactivePower"];
-    if (doc.containsKey("powerFactor")) powerFactor = doc["powerFactor"];
-    if (doc.containsKey("frequency")) frequency = doc["frequency"];
-    if (doc.containsKey("importEnergy")) importEnergy = doc["importEnergy"];
-    if (doc.containsKey("exportEnergy")) exportEnergy = doc["exportEnergy"];
+    // Update registers with received values or default to zero/blank
+    voltage = doc.containsKey("voltage") ? doc["voltage"] : 0.0;
+    current = doc.containsKey("current") ? doc["current"] : 0.0;
+    activePower = doc.containsKey("activePower") ? doc["activePower"] : 0.0;
+    apparentPower = doc.containsKey("apparentPower") ? doc["apparentPower"] : 0.0;
+    reactivePower = doc.containsKey("reactivePower") ? doc["reactivePower"] : 0.0;
+    powerFactor = doc.containsKey("powerFactor") ? doc["powerFactor"] : 0.0;
+    frequency = doc.containsKey("frequency") ? doc["frequency"] : 0.0;
+    importEnergy = doc.containsKey("importEnergy") ? doc["importEnergy"] : 0.0;
+    exportEnergy = doc.containsKey("exportEnergy") ? doc["exportEnergy"] : 0.0;
 
     Serial.println("[MQTT] Meter data updated from MQTT.");
   });
