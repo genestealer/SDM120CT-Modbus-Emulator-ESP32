@@ -29,7 +29,6 @@
 #include <ModbusServerRTU.h>
 #include <ArduinoJson.h>
 #include <ArduinoOTA.h>
-// #include <EspMQTTClient.h>  // MQTT client library (duplicate removed)
 #include "Private.h"
 #include <time.h>
 
