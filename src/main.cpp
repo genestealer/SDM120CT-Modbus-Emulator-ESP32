@@ -400,7 +400,7 @@ void publishWifiDetails() {
   time_t now = time(nullptr);
 
   // Check if the current time is valid
-  if (now < 100000) { // Arbitrary threshold to detect invalid time
+  if (now < INVALID_SYSTEM_TIME_THRESHOLD) { // Threshold to detect invalid system time
     Serial.println("[WARN] Invalid system time detected. Using fallback uptime.");
     now = uptimeSeconds; // Fallback to uptime seconds
   }
