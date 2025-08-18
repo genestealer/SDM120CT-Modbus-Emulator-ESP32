@@ -29,7 +29,7 @@
 #include <ModbusServerRTU.h>
 #include <ArduinoJson.h>
 #include <ArduinoOTA.h>
-#include <EspMQTTClient.h>  // MQTT client library
+// #include <EspMQTTClient.h>  // MQTT client library (duplicate removed)
 #include "Private.h"
 #include <time.h>
 
@@ -361,7 +361,7 @@ String jsonDiscoveryRestartButton = R"rawliteral(
 // Discovery for Inverter Connection Status
 String jsonDiscoveryInverterConnected = R"rawliteral(
 {
-  "name": "Inverter Connnected",
+  "name": "Inverter Connected",
   "uniq_id": "sdm120ct_inverter_connected",
   "obj_id": "sdm120ct_inverter_connected",
   "device_class": "connectivity",
@@ -700,7 +700,7 @@ void setup() {
   mqtt.setMaxPacketSize(2048); // Set to a size larger than your longest payload
 
     // Set the Last Will and Testament (LWT)
-  mqtt.enableLastWillMessage("everblu/cyble/status", "offline", true);  // You can activate the retain flag by setting the third parameter to true
+  mqtt.enableLastWillMessage("homeassistant/sensor/sdm120ct/status", "offline", true);  // You can activate the retain flag by setting the third parameter to true
 
   // Register Modbus handlers
   MBserver.registerWorker(meterID, READ_INPUT_REGISTER, &handleRead);
