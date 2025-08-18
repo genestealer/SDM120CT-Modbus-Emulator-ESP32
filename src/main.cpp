@@ -441,7 +441,7 @@ void publishInverterConnectionStatus(bool forcePublish = false) {
 // Update connection status in Modbus handlers
 void updateInverterConnectionStatus(bool forcePublish = false) {
   // Check if the inverter is connected based on the last poll time
-  inverterConnected = (millis() - lastPollTime) <= 60000; // 1 minute timeout
+  inverterConnected = (millis() - lastPollTime) <= INVERTER_CONNECTION_TIMEOUT_MS;
 
   // Publish the connection status only if it has changed or if forced
   publishInverterConnectionStatus(forcePublish);
