@@ -108,6 +108,9 @@ uint16_t paritySetting = 0;          // 0=None, 1=Even, 2=Odd
 // Setup mode flag
 bool setupMode = false; // Controlled via MQTT now
 
+#define INVALID_SYSTEM_TIME_THRESHOLD 100000
+#define INVERTER_CONNECTION_TIMEOUT_MS 60000 // 1 minute timeout
+
 // ========================= MQTT Client =========================
 EspMQTTClient mqtt(
   ssid,
