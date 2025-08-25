@@ -1,4 +1,4 @@
-# SDM120CT_Modbus_Emulator
+# SDM120CT Modbus RTU Meter Emulator (ESP32 + MQTT + Home Assistant)
 
 Eastron SDM120CT ESP32 Modbus RTU Emulator
 
@@ -25,6 +25,8 @@ For Meter 1, the inverter expects to see a negative value when the house is draw
 - Inverter connection status
 
 ## Example JSON
+
+For Eaton xStorage: the meter values for current, activePower, apparentPower, and reactivePower must be positive when exporting (sending power out) and negative when importing (drawing power in).
 
 ```json
 {
@@ -75,3 +77,46 @@ Sources:
 [SDM120 Modbus Protocol PDF](https://www.eastroneurope.com/images/uploads/products/protocol/SDM120-MODBUS_Protocol.pdf)
 
 Register list cross-referenced using the "REGISTERS LIST FOR SDM DEVICES" table in the SDM Energy Meter library ([SDM.h](https://github.com/reaper7/SDM_Energy_Meter/blob/master/SDM.h#L103)), which covers SDM72, SDM120, SDM220, SDM230, SDM630, and DDM18SD Modbus Energy meters.
+
+
+## Home Assistant Helpers for Inverter Demand Management
+
+To dynamically control the `activePower` value sent to the inverter via MQTT, this setup uses three helpers created in Home Assistant. These helpers allow fine-tuning of the inverter demand logic to prevent grid export, limit discharge rates, and adapt to real-time battery output.
+
+### Helper Overview
+
+####  `input_number.maximum_inverter_power_limit`
+- **Purpose:** Sets the **maximum allowed output** from the inverter to prevent over-discharge and protect battery cell balancing.
+- **Parameters:**
+  - Minimum: `0`
+  - Maximum: `3700`
+  - Step Size: `50`
+  - Unit: `W`
+
+####  `input_number.inverter_power_offset`
+- **Purpose:** Adds a small positive or negative **bias** to influence inverter behavior.
+  - When battery output is **below** the maximum limit, the offset is **added** to the demand to encourage discharge.
+  - When battery output **exceeds** the limit, the offset is **negated** and sent as a negative value to reduce output.
+- **Parameters:**
+  - Minimum: `0`
+  - Maximum: `200`
+  - Step Size: `5`
+  - Unit: `W`
+
+####  `sensor.inverter_demand_power`
+- **Purpose:** Template sensor that calculates the **final demand** value to send to the inverter.
+- **Logic:**
+  - If the battery output (`sensor.storage_battery_power_production`) is **greater than** the maximum limit, output `-offset` to reduce discharge.
+  - Otherwise, calculate:
+
+    ```jinja2
+    demand = net_power + offset
+    capped_demand = min(demand, limit - battery_output)
+    ```
+
+    and round the result to one decimal place.
+- **Output:** A positive value (in watts) when more power is needed from the inverter, or a negative value to request a reduction in output.
+
+### Example Use
+
+The value from `sensor.inverter_demand_power` is used in the MQTT payload to populate the `activePower` field of the SDM120CT Modbus emulator. This ensures the inverter sees a load slightly greater than reality (preventing export) but never exceeds a safe discharge rate.
