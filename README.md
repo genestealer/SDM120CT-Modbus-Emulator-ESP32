@@ -48,6 +48,10 @@ This project uses a `Private.h` file for WiFi and MQTT credentials, as well as o
 
 ## SDM120CT Registers Emulated
 
+[SDM120 Modbus Protocol PDF](https://www.eastroneurope.com/images/uploads/products/protocol/SDM120-MODBUS_Protocol.pdf)
+
+Register list cross-referenced using the "REGISTERS LIST FOR SDM DEVICES" table in the SDM Energy Meter library ([SDM.h](https://github.com/reaper7/SDM_Energy_Meter/blob/master/SDM.h#L103)), which covers SDM72, SDM120, SDM220, SDM230, SDM630, and DDM18SD Modbus Energy meters.
+
 The following Modbus registers are emulated by this project for the SDM120CT:
 
 **Input Registers (Function Code 04):**
