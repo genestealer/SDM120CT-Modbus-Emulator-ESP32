@@ -108,19 +108,39 @@ To dynamically control the `activePower` value sent to the inverter via MQTT, th
   - Unit: `W`
 
 ####  `sensor.inverter_demand_power`
-- **Purpose:** Template sensor that calculates the **final demand** value to send to the inverter.
+- **Purpose:** Template sensor that calculates the **final activePower value** to be published to the inverter via MQTT.
 - **Logic:**
-  - If the battery output (`sensor.storage_battery_power_production`) is **greater than** the maximum limit, output `-offset` to reduce discharge.
-  - Otherwise, calculate:
+  - Uses real-time net power and battery output data.
+  - Applies a configurable **offset** to bias the inverter into discharging just slightly more than actual need (to reduce grid export).
+  - Caps the output using a configurable **maximum inverter power limit** to protect the battery from over-discharge.
+  - If the battery is already over the power limit, sends a **negative value** to pull back inverter output.
+  - Result is rounded to **1 decimal place** for stability and clarity.
 
-    ```jinja2
-    demand = net_power + offset
-    capped_demand = min(demand, limit - battery_output)
-    ```
+- **Depends on:**
+  - `sensor.solar_panels_current_net_power_consumption_watts`
+  - `sensor.storage_battery_power_production`
+  - `input_number.maximum_inverter_power_limit`
+  - `input_number.inverter_power_offset`
 
-    and round the result to one decimal place.
-- **Output:** A positive value (in watts) when more power is needed from the inverter, or a negative value to request a reduction in output.
+- **Output:** Positive power demand in watts (or negative value to reduce inverter output).
 
+#### 🧠 Template Logic (Jinja2):
+
+```jinja2
+{% set net_power = states('sensor.solar_panels_current_net_power_consumption_watts') | float %}
+{% set battery_output = states('sensor.storage_battery_power_production') | float(0) %}
+{% set limit = states('input_number.maximum_inverter_power_limit') | float(500) %}
+{% set offset = states('input_number.inverter_power_offset') | float(100) %}
+
+{% if battery_output > limit %}
+  {{ (-1 * offset) | round(1) }}
+{% else %}
+  {% set adjusted_power = net_power - offset %}
+  {% set max_allowable = limit - battery_output %}
+  {% set demand = adjusted_power if adjusted_power > 0 else 0 %}
+  {{ [demand, max_allowable] | min | round(1) }}
+{% endif %}
+```
 ### Example Use
 
 The value from `sensor.inverter_demand_power` is used in the MQTT payload to populate the `activePower` field of the SDM120CT Modbus emulator. This ensures the inverter sees a load slightly greater than reality (preventing export) but never exceeds a safe discharge rate.
