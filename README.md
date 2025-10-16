@@ -4,13 +4,21 @@ Eastron SDM120CT ESP32 Modbus RTU Emulator
 
 > **Note:** This is a working proof of concept and may have bugs. Use with caution and report any issues you encounter.
 
+## ESPHome Migration
+
+This project has been migrated to run natively under ESPHome using built‑in components (no separate Arduino sketch required). The ESPHome configuration used for the migration is maintained in my Home Assistant Configuration repository:
+
+https://github.com/genestealer/Home-Assistant-Configuration inside esphome folder
+
+Use that ESPHome YAML as a drop‑in configuration for ESP32 devices to emulate the SDM120CT Modbus RTU server directly from ESPHome.
+
 ## Project Motivation
 
-This project exists to emulate the SDM120CT Modbus meter for use with my "Eaton xStorage Home" battery and inverter system. The Eaton xStorage Home expects to communicate with a compatible Modbus energy meter, but in my setup, I use this emulator to provide the required data and integration. For more details on the inverter and battery API, see my related project: [Eaton xStorage Home API Documentation](https://github.com/genestealer/eaton-xstorage-home-api-doc).
+This project exists to emulate the SDM120CT Modbus meter for use with my "Eaton xStorage Home" battery and inverter system. The Eaton xStorage Home expects to communicate with a compatible Modbus e[...] 
 
 ## Description
 
-This project emulates the SDM120CT Modbus meter and integrates with Home Assistant via MQTT. It supports telemetry publishing, setup mode toggle, restart functionality, and inverter connection status.
+This project emulates the SDM120CT Modbus meter and integrates with Home Assistant via MQTT. It supports telemetry publishing, setup mode toggle, restart functionality, and inverter connection sta[...] 
 
 ## Note
 
@@ -44,13 +52,13 @@ For Eaton xStorage: the meter values for current, activePower, apparentPower, an
 
 ## Secrets and Configuration
 
-This project uses a `Private.h` file for WiFi and MQTT credentials, as well as other configuration settings. An example file (`include/Private.example.h`) is provided. **Do not commit your real secrets to version control.** Copy `Private.example.h` to `Private.h` and fill in your own values.
+This project uses a `Private.h` file for WiFi and MQTT credentials, as well as other configuration settings. An example file (`include/Private.example.h`) is provided. **Do not commit your real se[...] 
 
 ## SDM120CT Registers Emulated
 
 [SDM120 Modbus Protocol PDF](https://www.eastroneurope.com/images/uploads/products/protocol/SDM120-MODBUS_Protocol.pdf)
 
-Register list cross-referenced using the "REGISTERS LIST FOR SDM DEVICES" table in the SDM Energy Meter library ([SDM.h](https://github.com/reaper7/SDM_Energy_Meter/blob/master/SDM.h#L103)), which covers SDM72, SDM120, SDM220, SDM230, SDM630, and DDM18SD Modbus Energy meters.
+Register list cross-referenced using the "REGISTERS LIST FOR SDM DEVICES" table in the SDM Energy Meter library ([SDM.h](https://github.com/reaper7/SDM_Energy_Meter/blob/master/SDM.h#L103)), which[...] 
 
 The following Modbus registers are emulated by this project for the SDM120CT:
 
@@ -80,12 +88,12 @@ Sources:
 [SDM Energy Meter project](https://github.com/reaper7/SDM_Energy_Meter/tree/master?tab=readme-ov-file#reading)
 [SDM120 Modbus Protocol PDF](https://www.eastroneurope.com/images/uploads/products/protocol/SDM120-MODBUS_Protocol.pdf)
 
-Register list cross-referenced using the "REGISTERS LIST FOR SDM DEVICES" table in the SDM Energy Meter library ([SDM.h](https://github.com/reaper7/SDM_Energy_Meter/blob/master/SDM.h#L103)), which covers SDM72, SDM120, SDM220, SDM230, SDM630, and DDM18SD Modbus Energy meters.
+Register list cross-referenced using the "REGISTERS LIST FOR SDM DEVICES" table in the SDM Energy Meter library ([SDM.h](https://github.com/reaper7/SDM_Energy_Meter/blob/master/SDM.h#L103)), which[...] 
 
 
 ## Home Assistant Helpers for Inverter Demand Management
 
-To dynamically control the `activePower` value sent to the inverter via MQTT, this setup uses three helpers created in Home Assistant. These helpers allow fine-tuning of the inverter demand logic to prevent grid export, limit discharge rates, and adapt to real-time battery output.
+To dynamically control the `activePower` value sent to the inverter via MQTT, this setup uses three helpers created in Home Assistant. These helpers allow fine-tuning of the inverter demand logic [...]  
 
 ### Helper Overview
 
@@ -143,4 +151,4 @@ To dynamically control the `activePower` value sent to the inverter via MQTT, th
 ```
 ### Example Use
 
-The value from `sensor.inverter_demand_power` is used in the MQTT payload to populate the `activePower` field of the SDM120CT Modbus emulator. This ensures the inverter sees a load slightly greater than reality (preventing export) but never exceeds a safe discharge rate.
+The value from `sensor.inverter_demand_power` is used in the MQTT payload to populate the `activePower` field of the SDM120CT Modbus emulator. This ensures the inverter sees a load slightly great[...] 
